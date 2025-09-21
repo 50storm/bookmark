@@ -16,9 +16,9 @@
     button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
       border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
+    #searchContainer { text-align: center; margin: 15px 0; }
     #searchBox {
-      width: 300px; padding: 6px; margin: 10px auto;
-      display: block; border: 1px solid #aaa; border-radius: 4px;
+      width: 300px; padding: 6px; border: 1px solid #aaa; border-radius: 4px;
     }
     #tagList { text-align: center; margin: 15px 0; }
     #tagList a { margin: 0 6px; cursor: pointer; color: #007bff; text-decoration: none; }
@@ -54,7 +54,11 @@
     <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
-  <input type="text" id="searchBox" placeholder="検索（タイトル・タグ・メモで絞り込み）">
+  <div id="searchContainer">
+    <input type="text" id="searchBox" placeholder="検索（スペース区切りで複数キーワード）">
+    <label><input type="radio" name="searchMode" value="AND" checked> AND</label>
+    <label><input type="radio" name="searchMode" value="OR"> OR</label>
+  </div>
 
   <div id="tagList"></div>
   <table>
@@ -79,6 +83,7 @@
     let editingIndex = null;
     let currentTagFilter = null;
     let currentSearchQuery = "";
+    let searchMode = "AND";
 
     render();
 
@@ -146,6 +151,13 @@
       render();
     });
 
+    document.querySelectorAll("input[name='searchMode']").forEach(radio => {
+      radio.addEventListener("change", e => {
+        searchMode = e.target.value;
+        render();
+      });
+    });
+
     function render() {
       list.innerHTML = "";
       bookmarks
@@ -154,10 +166,15 @@
           if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
             return false;
           }
-          // 検索クエリ絞り込み
+          // 複数キーワード検索
           if (currentSearchQuery) {
             const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
-            if (!haystack.includes(currentSearchQuery)) return false;
+            const keywords = currentSearchQuery.split(/\s+/).filter(Boolean);
+            if (searchMode === "AND") {
+              return keywords.every(k => haystack.includes(k));
+            } else {
+              return keywords.some(k => haystack.includes(k));
+            }
           }
           return true;
         })
@@ -235,7 +252,6 @@
       reader.readAsText(file);
     }
 
-    // 共通ダウンロード処理
     function downloadFile(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
