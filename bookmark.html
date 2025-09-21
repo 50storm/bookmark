@@ -16,13 +16,32 @@
     button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
       border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
-    #searchContainer { text-align: center; margin: 15px 0; }
-    #searchBox {
-      width: 300px; padding: 6px; border: 1px solid #aaa; border-radius: 4px;
+
+    /* 検索UIを横並びに整列 */
+    #searchContainer {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin: 15px 0;
     }
+    #searchBox {
+      flex: 0 0 300px;
+      padding: 6px;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+    }
+    #searchContainer label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.95em;
+    }
+
     #tagList { text-align: center; margin: 15px 0; }
     #tagList a { margin: 0 6px; cursor: pointer; color: #007bff; text-decoration: none; }
     #tagList a.active { font-weight: bold; color: darkred; }
+
     table { width: 100%; border-collapse: collapse; background: #fff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
@@ -54,6 +73,7 @@
     <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
+  <!-- 🔍 検索UI -->
   <div id="searchContainer">
     <input type="text" id="searchBox" placeholder="検索（スペース区切りで複数キーワード）">
     <label><input type="radio" name="searchMode" value="AND" checked> AND</label>
@@ -166,7 +186,7 @@
           if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
             return false;
           }
-          // 複数キーワード検索
+          // 検索クエリ
           if (currentSearchQuery) {
             const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
             const keywords = currentSearchQuery.split(/\s+/).filter(Boolean);
