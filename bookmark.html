@@ -7,10 +7,15 @@
     body { font-family: sans-serif; margin: 20px; }
     h1 { font-size: 1.5em; }
     form { margin-bottom: 1em; }
-    input { margin-right: 5px; }
+    input, textarea { margin: 3px 0; display: block; width: 300px; }
+    button { margin-top: 5px; }
     ul { list-style: none; padding: 0; }
-    li { margin: 5px 0; }
-    button { margin-left: 10px; }
+    li { margin: 10px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    .tags { color: #555; font-size: 0.9em; }
+    .memo { margin-top: 3px; font-size: 0.9em; color: #333; }
+    #tagList { margin: 10px 0; }
+    #tagList a { margin-right: 8px; cursor: pointer; color: blue; text-decoration: underline; }
+    #tagList a.active { font-weight: bold; color: darkred; }
   </style>
 </head>
 <body>
@@ -19,31 +24,57 @@
   <form id="bookmarkForm">
     <input type="text" id="title" placeholder="タイトル" required>
     <input type="url" id="url" placeholder="URL" required>
+    <input type="text" id="tags" placeholder="タグ（カンマ区切り）">
+    <textarea id="memo" placeholder="メモ" rows="2"></textarea>
     <button type="submit">追加</button>
   </form>
 
+  <div id="tagList"></div>
   <ul id="bookmarkList"></ul>
 
   <script>
     const form = document.getElementById("bookmarkForm");
     const list = document.getElementById("bookmarkList");
+    const tagList = document.getElementById("tagList");
 
-    // ローカルストレージから読込
     let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
+    let editingIndex = null;
+    let currentTagFilter = null;
+
     render();
 
-    // 追加
+    // 追加 or 更新
     form.addEventListener("submit", e => {
       e.preventDefault();
       const title = document.getElementById("title").value.trim();
       const url = document.getElementById("url").value.trim();
+      const tags = document.getElementById("tags").value.trim();
+      const memo = document.getElementById("memo").value.trim();
       if (!title || !url) return;
 
-      bookmarks.push({ title, url });
+      if (editingIndex !== null) {
+        bookmarks[editingIndex] = { title, url, tags, memo };
+        editingIndex = null;
+        form.querySelector("button").textContent = "追加";
+      } else {
+        bookmarks.push({ title, url, tags, memo });
+      }
+
       save();
       render();
       form.reset();
     });
+
+    // 編集
+    function editBookmark(index) {
+      const bm = bookmarks[index];
+      document.getElementById("title").value = bm.title;
+      document.getElementById("url").value = bm.url;
+      document.getElementById("tags").value = bm.tags;
+      document.getElementById("memo").value = bm.memo;
+      editingIndex = index;
+      form.querySelector("button").textContent = "更新";
+    }
 
     // 削除
     function removeBookmark(index) {
@@ -57,15 +88,47 @@
       localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
     }
 
+    // タグ一覧作成
+    function renderTags() {
+      const tagSet = new Set();
+      bookmarks.forEach(bm => {
+        if (bm.tags) {
+          bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
+        }
+      });
+      tagList.innerHTML = `<a onclick="filterByTag(null)" class="${currentTagFilter===null?'active':''}">すべて</a>`;
+      [...tagSet].sort().forEach(tag => {
+        tagList.innerHTML += `<a onclick="filterByTag('${tag}')" class="${currentTagFilter===tag?'active':''}">${tag}</a>`;
+      });
+    }
+
+    // タグで絞り込み
+    function filterByTag(tag) {
+      currentTagFilter = tag;
+      render();
+    }
+
     // 表示更新
     function render() {
       list.innerHTML = "";
-      bookmarks.forEach((bm, i) => {
-        const li = document.createElement("li");
-        li.innerHTML = `<a href="${bm.url}" target="_blank">${bm.title}</a>
-                        <button onclick="removeBookmark(${i})">削除</button>`;
-        list.appendChild(li);
-      });
+      bookmarks
+        .filter(bm => {
+          if (!currentTagFilter) return true;
+          return bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter);
+        })
+        .forEach((bm, i) => {
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <a href="${bm.url}" target="_blank">${bm.title}</a>
+            <button onclick="editBookmark(${i})">編集</button>
+            <button onclick="removeBookmark(${i})">削除</button><br>
+            <span class="tags"># ${bm.tags || "-"}</span>
+            <div class="memo">${bm.memo || ""}</div>
+          `;
+          list.appendChild(li);
+        });
+
+      renderTags();
     }
   </script>
 </body>
