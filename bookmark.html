@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ブックマークアプリ</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    h1 { font-size: 1.5em; }
+    form { margin-bottom: 1em; }
+    input { margin-right: 5px; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 5px 0; }
+    button { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>📑 ブックマークアプリ</h1>
+
+  <form id="bookmarkForm">
+    <input type="text" id="title" placeholder="タイトル" required>
+    <input type="url" id="url" placeholder="URL" required>
+    <button type="submit">追加</button>
+  </form>
+
+  <ul id="bookmarkList"></ul>
+
+  <script>
+    const form = document.getElementById("bookmarkForm");
+    const list = document.getElementById("bookmarkList");
+
+    // ローカルストレージから読込
+    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
+    render();
+
+    // 追加
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const title = document.getElementById("title").value.trim();
+      const url = document.getElementById("url").value.trim();
+      if (!title || !url) return;
+
+      bookmarks.push({ title, url });
+      save();
+      render();
+      form.reset();
+    });
+
+    // 削除
+    function removeBookmark(index) {
+      bookmarks.splice(index, 1);
+      save();
+      render();
+    }
+
+    // 保存
+    function save() {
+      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
+    }
+
+    // 表示更新
+    function render() {
+      list.innerHTML = "";
+      bookmarks.forEach((bm, i) => {
+        const li = document.createElement("li");
+        li.innerHTML = `<a href="${bm.url}" target="_blank">${bm.title}</a>
+                        <button onclick="removeBookmark(${i})">削除</button>`;
+        list.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
