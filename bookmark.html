@@ -16,6 +16,10 @@
     button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
       border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
+    #searchBox {
+      width: 300px; padding: 6px; margin: 10px auto;
+      display: block; border: 1px solid #aaa; border-radius: 4px;
+    }
     #tagList { text-align: center; margin: 15px 0; }
     #tagList a { margin: 0 6px; cursor: pointer; color: #007bff; text-decoration: none; }
     #tagList a.active { font-weight: bold; color: darkred; }
@@ -50,6 +54,8 @@
     <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
+  <input type="text" id="searchBox" placeholder="検索（タイトル・タグ・メモで絞り込み）">
+
   <div id="tagList"></div>
   <table>
     <thead>
@@ -67,10 +73,12 @@
     const form = document.getElementById("bookmarkForm");
     const list = document.getElementById("bookmarkList");
     const tagList = document.getElementById("tagList");
+    const searchBox = document.getElementById("searchBox");
 
     let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
     let editingIndex = null;
     let currentTagFilter = null;
+    let currentSearchQuery = "";
 
     render();
 
@@ -133,12 +141,25 @@
       render();
     }
 
+    searchBox.addEventListener("input", () => {
+      currentSearchQuery = searchBox.value.toLowerCase();
+      render();
+    });
+
     function render() {
       list.innerHTML = "";
       bookmarks
         .filter(bm => {
-          if (!currentTagFilter) return true;
-          return bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter);
+          // タグ絞り込み
+          if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
+            return false;
+          }
+          // 検索クエリ絞り込み
+          if (currentSearchQuery) {
+            const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
+            if (!haystack.includes(currentSearchQuery)) return false;
+          }
+          return true;
         })
         .forEach((bm, i) => {
           const row = document.createElement("tr");
@@ -157,13 +178,11 @@
       renderTags();
     }
 
-    // === JSON エクスポート ===
+    // === JSON エクスポート / インポート ===
     function exportJSON() {
       const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: "application/json" });
       downloadFile(blob, "bookmarks.json");
     }
-
-    // === JSON インポート ===
     function importJSON(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -177,12 +196,12 @@
             render();
             alert("JSONインポート完了！");
           }
-        } catch { alert("JSONの読み込みに失敗しました"); }
+        } catch { alert("JSON読み込み失敗"); }
       };
       reader.readAsText(file);
     }
 
-    // === CSV エクスポート ===
+    // === CSV エクスポート / インポート ===
     function exportCSV() {
       let csv = "タイトル,URL,タグ,メモ\n";
       bookmarks.forEach(bm => {
@@ -197,15 +216,13 @@
       const blob = new Blob([csv], { type: "text/csv" });
       downloadFile(blob, "bookmarks.csv");
     }
-
-    // === CSV インポート ===
     function importCSV(event) {
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = e => {
         try {
-          const lines = e.target.result.split(/\r?\n/).slice(1); // 1行目はヘッダー
+          const lines = e.target.result.split(/\r?\n/).slice(1);
           bookmarks = lines.filter(l=>l.trim()).map(line => {
             const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
             return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
@@ -213,12 +230,12 @@
           save();
           render();
           alert("CSVインポート完了！");
-        } catch { alert("CSVの読み込みに失敗しました"); }
+        } catch { alert("CSV読み込み失敗"); }
       };
       reader.readAsText(file);
     }
 
-    // ダウンロード処理共通
+    // 共通ダウンロード処理
     function downloadFile(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
