@@ -41,9 +41,13 @@
   </form>
 
   <div style="text-align:center; margin: 15px;">
-    <button onclick="exportData()">エクスポート</button>
-    <input type="file" id="importFile" style="display:none" accept="application/json" onchange="importData(event)">
-    <button onclick="document.getElementById('importFile').click()">インポート</button>
+    <button onclick="exportJSON()">JSONエクスポート</button>
+    <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="importJSON(event)">
+    <button onclick="document.getElementById('importJSON').click()">JSONインポート</button>
+
+    <button onclick="exportCSV()">CSVエクスポート</button>
+    <input type="file" id="importCSV" style="display:none" accept=".csv,text/csv" onchange="importCSV(event)">
+    <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
   <div id="tagList"></div>
@@ -153,19 +157,14 @@
       renderTags();
     }
 
-    // === エクスポート ===
-    function exportData() {
+    // === JSON エクスポート ===
+    function exportJSON() {
       const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "bookmarks.json";
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, "bookmarks.json");
     }
 
-    // === インポート ===
-    function importData(event) {
+    // === JSON インポート ===
+    function importJSON(event) {
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
@@ -176,15 +175,57 @@
             bookmarks = data;
             save();
             render();
-            alert("インポートが完了しました！");
-          } else {
-            alert("形式が正しくありません。");
+            alert("JSONインポート完了！");
           }
-        } catch {
-          alert("読み込みに失敗しました。");
-        }
+        } catch { alert("JSONの読み込みに失敗しました"); }
       };
       reader.readAsText(file);
+    }
+
+    // === CSV エクスポート ===
+    function exportCSV() {
+      let csv = "タイトル,URL,タグ,メモ\n";
+      bookmarks.forEach(bm => {
+        const row = [
+          `"${(bm.title||"").replace(/"/g,'""')}"`,
+          `"${(bm.url||"").replace(/"/g,'""')}"`,
+          `"${(bm.tags||"").replace(/"/g,'""')}"`,
+          `"${(bm.memo||"").replace(/"/g,'""')}"`
+        ].join(",");
+        csv += row + "\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      downloadFile(blob, "bookmarks.csv");
+    }
+
+    // === CSV インポート ===
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const lines = e.target.result.split(/\r?\n/).slice(1); // 1行目はヘッダー
+          bookmarks = lines.filter(l=>l.trim()).map(line => {
+            const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
+            return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
+          });
+          save();
+          render();
+          alert("CSVインポート完了！");
+        } catch { alert("CSVの読み込みに失敗しました"); }
+      };
+      reader.readAsText(file);
+    }
+
+    // ダウンロード処理共通
+    function downloadFile(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     }
   </script>
 </body>
