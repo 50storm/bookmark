@@ -4,18 +4,86 @@
   <meta charset="UTF-8">
   <title>ブックマークアプリ</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
-    h1 { font-size: 1.5em; }
-    form { margin-bottom: 1em; }
-    input, textarea { margin: 3px 0; display: block; width: 300px; }
-    button { margin-top: 5px; }
-    ul { list-style: none; padding: 0; }
-    li { margin: 10px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-    .tags { color: #555; font-size: 0.9em; }
-    .memo { margin-top: 3px; font-size: 0.9em; color: #333; }
-    #tagList { margin: 10px 0; }
-    #tagList a { margin-right: 8px; cursor: pointer; color: blue; text-decoration: underline; }
+    body { 
+      font-family: 'Segoe UI', sans-serif; 
+      margin: 20px; 
+      background: #f9f9f9; 
+      color: #333;
+    }
+    h1 { text-align: center; margin-bottom: 20px; }
+    form { 
+      margin-bottom: 1em; 
+      background: #fff; 
+      padding: 15px; 
+      border-radius: 5px; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+      max-width: 600px; 
+      margin-left: auto; 
+      margin-right: auto;
+    }
+    input, textarea { 
+      margin: 5px 0; 
+      display: block; 
+      width: 100%; 
+      padding: 8px; 
+      border: 1px solid #ccc; 
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button { 
+      margin-top: 8px; 
+      padding: 6px 12px; 
+      border: none; 
+      border-radius: 4px; 
+      background: #007bff; 
+      color: #fff; 
+      cursor: pointer;
+    }
+    button:hover { background: #0056b3; }
+    #tagList { text-align: center; margin: 15px 0; }
+    #tagList a { 
+      margin: 0 6px; 
+      cursor: pointer; 
+      color: #007bff; 
+      text-decoration: none; 
+    }
+    #tagList a:hover { text-decoration: underline; }
     #tagList a.active { font-weight: bold; color: darkred; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f0f0;
+    }
+    .tags {
+      font-size: 0.85em;
+      color: #555;
+    }
+    .memo {
+      font-size: 0.9em;
+      color: #444;
+    }
+    .action-btn {
+      background: #28a745;
+      margin-right: 5px;
+    }
+    .action-btn:hover { background: #1e7e34; }
+    .delete-btn {
+      background: #dc3545;
+    }
+    .delete-btn:hover {
+      background: #a71d2a;
+    }
   </style>
 </head>
 <body>
@@ -30,7 +98,17 @@
   </form>
 
   <div id="tagList"></div>
-  <ul id="bookmarkList"></ul>
+  <table id="bookmarkTable">
+    <thead>
+      <tr>
+        <th>タイトル</th>
+        <th>タグ</th>
+        <th>メモ</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="bookmarkList"></tbody>
+  </table>
 
   <script>
     const form = document.getElementById("bookmarkForm");
@@ -43,7 +121,6 @@
 
     render();
 
-    // 追加 or 更新
     form.addEventListener("submit", e => {
       e.preventDefault();
       const title = document.getElementById("title").value.trim();
@@ -65,7 +142,6 @@
       form.reset();
     });
 
-    // 編集
     function editBookmark(index) {
       const bm = bookmarks[index];
       document.getElementById("title").value = bm.title;
@@ -76,19 +152,16 @@
       form.querySelector("button").textContent = "更新";
     }
 
-    // 削除
     function removeBookmark(index) {
       bookmarks.splice(index, 1);
       save();
       render();
     }
 
-    // 保存
     function save() {
       localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
     }
 
-    // タグ一覧作成
     function renderTags() {
       const tagSet = new Set();
       bookmarks.forEach(bm => {
@@ -102,13 +175,11 @@
       });
     }
 
-    // タグで絞り込み
     function filterByTag(tag) {
       currentTagFilter = tag;
       render();
     }
 
-    // 表示更新
     function render() {
       list.innerHTML = "";
       bookmarks
@@ -117,15 +188,17 @@
           return bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter);
         })
         .forEach((bm, i) => {
-          const li = document.createElement("li");
-          li.innerHTML = `
-            <a href="${bm.url}" target="_blank">${bm.title}</a>
-            <button onclick="editBookmark(${i})">編集</button>
-            <button onclick="removeBookmark(${i})">削除</button><br>
-            <span class="tags"># ${bm.tags || "-"}</span>
-            <div class="memo">${bm.memo || ""}</div>
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
+            <td class="tags">${bm.tags || "-"}</td>
+            <td class="memo">${bm.memo || ""}</td>
+            <td>
+              <button class="action-btn" onclick="editBookmark(${i})">編集</button>
+              <button class="delete-btn" onclick="removeBookmark(${i})">削除</button>
+            </td>
           `;
-          list.appendChild(li);
+          list.appendChild(row);
         });
 
       renderTags();
