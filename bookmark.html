@@ -22,7 +22,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 12px;
+      gap: 20px; /* 検索ボックスとラジオの間隔 */
       margin: 15px 0;
     }
     #searchBox {
@@ -31,11 +31,19 @@
       border: 1px solid #aaa;
       border-radius: 4px;
     }
-    #searchContainer label {
+    .searchMode {
       display: flex;
+      gap: 20px; /* AND と OR の間隔 */
+    }
+    .radioLabel {
+      display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;   /* ボタンと文字の間隔 */
       font-size: 0.95em;
+      cursor: pointer;
+    }
+    .radioLabel input {
+      margin: 0; /* デフォルトの余白を消す */
     }
 
     #tagList { text-align: center; margin: 15px 0; }
@@ -76,8 +84,16 @@
   <!-- 🔍 検索UI -->
   <div id="searchContainer">
     <input type="text" id="searchBox" placeholder="検索（スペース区切りで複数キーワード）">
-    <label><input type="radio" name="searchMode" value="AND" checked> AND</label>
-    <label><input type="radio" name="searchMode" value="OR"> OR</label>
+    <div class="searchMode">
+      <label class="radioLabel">
+        <input type="radio" name="searchMode" value="AND" checked>
+        <span>AND</span>
+      </label>
+      <label class="radioLabel">
+        <input type="radio" name="searchMode" value="OR">
+        <span>OR</span>
+      </label>
+    </div>
   </div>
 
   <div id="tagList"></div>
