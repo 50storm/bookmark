@@ -60,11 +60,31 @@
   </table>
 
   <script>
+    // ==============================
+    // Storage Strategy Classes
+    // ==============================
+    class StorageStrategy {
+      load() { throw new Error("load() not implemented"); }
+      save(data) { throw new Error("save() not implemented"); }
+    }
+
+    class LocalStorageStrategy extends StorageStrategy {
+      constructor(key="bookmarks") { super(); this.key = key; }
+      load() { return JSON.parse(localStorage.getItem(this.key) || "[]"); }
+      save(data) { localStorage.setItem(this.key, JSON.stringify(data)); }
+    }
+
+    class MemoryStorageStrategy extends StorageStrategy {
+      constructor() { super(); this.memory = []; }
+      load() { return this.memory; }
+      save(data) { this.memory = data; }
+    }
+
+    // ==============================
+    // UI Component Classes
+    // ==============================
     class TagList {
-      constructor(app, el) {
-        this.app = app;
-        this.el = el;
-      }
+      constructor(app, el) { this.app = app; this.el = el; }
       render() {
         const tagSet = new Set();
         this.app.bookmarks.forEach(bm => {
@@ -79,25 +99,14 @@
 
     class SearchBar {
       constructor(app, inputEl, radios) {
-        this.app = app;
-        this.inputEl = inputEl;
-        this.radios = radios;
-        this.inputEl.addEventListener("input", () => { 
-          this.app.currentSearchQuery = this.inputEl.value.toLowerCase(); 
-          this.app.render(); 
-        });
-        this.radios.forEach(r => r.addEventListener("change", e => { 
-          this.app.searchMode = e.target.value; 
-          this.app.render(); 
-        }));
+        this.app = app; this.inputEl = inputEl; this.radios = radios;
+        this.inputEl.addEventListener("input", () => { this.app.currentSearchQuery = this.inputEl.value.toLowerCase(); this.app.render(); });
+        this.radios.forEach(r => r.addEventListener("change", e => { this.app.searchMode = e.target.value; this.app.render(); }));
       }
     }
 
     class BookmarkList {
-      constructor(app, el) {
-        this.app = app;
-        this.el = el;
-      }
+      constructor(app, el) { this.app = app; this.el = el; }
       render() {
         this.el.innerHTML = "";
         this.app.bookmarks
@@ -118,27 +127,29 @@
       }
     }
 
+    // ==============================
+    // Main App
+    // ==============================
     class BookmarkApp {
-      constructor() {
-        this.bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
+      constructor(storage) {
+        this.storage = storage; // ← Strategy注入
+        this.bookmarks = this.storage.load();
         this.editingIndex = null;
         this.currentTagFilter = null;
         this.currentSearchQuery = "";
         this.searchMode = "AND";
 
-        // UI 部品
+        // UI
         this.tagList = new TagList(this, document.getElementById("tagList"));
         this.searchBar = new SearchBar(this, document.getElementById("searchBox"), document.querySelectorAll("input[name='searchMode']"));
         this.bookmarkList = new BookmarkList(this, document.getElementById("bookmarkList"));
-
-        // フォーム処理
         this.form = document.getElementById("bookmarkForm");
-        this.form.addEventListener("submit", e => this.handleSubmit(e));
 
+        this.form.addEventListener("submit", e => this.handleSubmit(e));
         this.render();
       }
 
-      // ===== CRUD =====
+      // CRUD
       handleSubmit(e) {
         e.preventDefault();
         const title = document.getElementById("title").value.trim();
@@ -164,13 +175,10 @@
         this.editingIndex = index;
         this.form.querySelector("button").textContent = "更新";
       }
-      removeBookmark(index) {
-        this.bookmarks.splice(index, 1);
-        this.save(); this.render();
-      }
-      save() { localStorage.setItem("bookmarks", JSON.stringify(this.bookmarks)); }
+      removeBookmark(index) { this.bookmarks.splice(index, 1); this.save(); this.render(); }
+      save() { this.storage.save(this.bookmarks); }
 
-      // ===== FILTER =====
+      // FILTER
       filterByTag(tag) { this.currentTagFilter = tag; this.render(); }
       filterBookmark(bm) {
         if (this.currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(this.currentTagFilter))) return false;
@@ -182,26 +190,15 @@
         return true;
       }
 
-      // ===== RENDER =====
-      render() {
-        this.bookmarkList.render();
-        this.tagList.render();
-      }
+      // RENDER
+      render() { this.bookmarkList.render(); this.tagList.render(); }
 
-      // ===== EXPORT / IMPORT =====
-      exportJSON() {
-        const blob = new Blob([JSON.stringify(this.bookmarks, null, 2)], { type: "application/json" });
-        this.downloadFile(blob, "bookmarks.json");
-      }
-      importJSON(event) {
-        const file = event.target.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => { try {
-          const data = JSON.parse(e.target.result);
-          if (Array.isArray(data)) { this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！"); }
-        } catch { alert("JSON読み込み失敗"); }};
-        reader.readAsText(file);
-      }
+      // EXPORT / IMPORT
+      exportJSON() { const blob = new Blob([JSON.stringify(this.bookmarks, null, 2)], { type: "application/json" }); this.downloadFile(blob, "bookmarks.json"); }
+      importJSON(event) { const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader(); reader.onload = e => { try {
+          const data = JSON.parse(e.target.result); if (Array.isArray(data)) { this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！"); }
+        } catch { alert("JSON読み込み失敗"); }}; reader.readAsText(file); }
       exportCSV() {
         let csv = "タイトル,URL,タグ,メモ\n";
         this.bookmarks.forEach(bm => {
@@ -223,18 +220,16 @@
             return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
           });
           this.save(); this.render(); alert("CSVインポート完了！");
-        } catch { alert("CSV読み込み失敗"); }};
-        reader.readAsText(file);
+        } catch { alert("CSV読み込み失敗"); }}; reader.readAsText(file);
       }
-      downloadFile(blob, filename) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-        URL.revokeObjectURL(url);
-      }
+      downloadFile(blob, filename) { const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
     }
 
+    // ==============================
     // アプリ起動
-    const app = new BookmarkApp();
+    // ==============================
+    const app = new BookmarkApp(new LocalStorageStrategy());
+    // テスト用途なら: const app = new BookmarkApp(new MemoryStorageStrategy());
   </script>
 </body>
 </html>
