@@ -16,34 +16,12 @@
     button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
       border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
-
-    /* 検索UIを横並びに整列 */
-    #searchContainer {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 12px;
-      margin: 15px 0;
-    }
-    #searchBox {
-      flex: 0 0 300px;
-      padding: 6px;
-      border: 1px solid #aaa;
-      border-radius: 4px;
-    }
-    #searchContainer label {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.95em;
-    }
-
+    #searchContainer { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 15px 0; }
+    #searchBox { flex: 0 0 300px; padding: 6px; border: 1px solid #aaa; border-radius: 4px; }
     #tagList { text-align: center; margin: 15px 0; }
     #tagList a { margin: 0 6px; cursor: pointer; color: #007bff; text-decoration: none; }
     #tagList a.active { font-weight: bold; color: darkred; }
-
-    table { width: 100%; border-collapse: collapse; background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
     th { background: #f0f0f0; }
     .tags { font-size: 0.85em; color: #555; }
@@ -55,7 +33,6 @@
 <body>
   <h1>📑 ブックマークアプリ</h1>
 
-  <!-- 入力フォーム -->
   <form id="bookmarkForm">
     <input type="text" id="title" placeholder="タイトル" required>
     <input type="url" id="url" placeholder="URL" required>
@@ -64,28 +41,22 @@
     <button type="submit">追加</button>
   </form>
 
-  <!-- エクスポート / インポート機能 -->
   <div style="text-align:center; margin: 15px;">
-    <button onclick="exportJSON()">JSONエクスポート</button>
-    <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="importJSON(event)">
+    <button onclick="app.exportJSON()">JSONエクスポート</button>
+    <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="app.importJSON(event)">
     <button onclick="document.getElementById('importJSON').click()">JSONインポート</button>
-
-    <button onclick="exportCSV()">CSVエクスポート</button>
-    <input type="file" id="importCSV" style="display:none" accept=".csv,text/csv" onchange="importCSV(event)">
+    <button onclick="app.exportCSV()">CSVエクスポート</button>
+    <input type="file" id="importCSV" style="display:none" accept=".csv,text/csv" onchange="app.importCSV(event)">
     <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
-  <!-- 🔍 検索UI -->
   <div id="searchContainer">
     <input type="text" id="searchBox" placeholder="検索（スペース区切りで複数キーワード）">
     <label><input type="radio" name="searchMode" value="AND" checked> AND</label>
     <label><input type="radio" name="searchMode" value="OR"> OR</label>
   </div>
 
-  <!-- タグ一覧 -->
   <div id="tagList"></div>
-
-  <!-- ブックマーク表示テーブル -->
   <table>
     <thead>
       <tr>
@@ -99,208 +70,172 @@
   </table>
 
   <script>
-    // DOM参照
-    const form = document.getElementById("bookmarkForm");
-    const list = document.getElementById("bookmarkList");
-    const tagList = document.getElementById("tagList");
-    const searchBox = document.getElementById("searchBox");
+    class BookmarkApp {
+      constructor() {
+        this.bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
+        this.editingIndex = null;
+        this.currentTagFilter = null;
+        this.currentSearchQuery = "";
+        this.searchMode = "AND";
 
-    // アプリ状態管理
-    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]"); // localStorageから復元
-    let editingIndex = null; // 編集対象のindex
-    let currentTagFilter = null; // 現在のタグフィルタ
-    let currentSearchQuery = ""; // 現在の検索キーワード
-    let searchMode = "AND"; // AND / OR モード
+        // DOM
+        this.form = document.getElementById("bookmarkForm");
+        this.list = document.getElementById("bookmarkList");
+        this.tagList = document.getElementById("tagList");
+        this.searchBox = document.getElementById("searchBox");
 
-    render();
-
-    // フォーム送信（追加 or 更新）
-    form.addEventListener("submit", e => {
-      e.preventDefault();
-      const title = document.getElementById("title").value.trim();
-      const url = document.getElementById("url").value.trim();
-      const tags = document.getElementById("tags").value.trim();
-      const memo = document.getElementById("memo").value.trim();
-      if (!title || !url) return;
-
-      if (editingIndex !== null) {
-        // 編集中 → 上書き
-        bookmarks[editingIndex] = { title, url, tags, memo };
-        editingIndex = null;
-        form.querySelector("button").textContent = "追加";
-      } else {
-        // 新規追加
-        bookmarks.push({ title, url, tags, memo });
-      }
-
-      save();
-      render();
-      form.reset();
-    });
-
-    // 編集処理
-    function editBookmark(index) {
-      const bm = bookmarks[index];
-      document.getElementById("title").value = bm.title;
-      document.getElementById("url").value = bm.url;
-      document.getElementById("tags").value = bm.tags;
-      document.getElementById("memo").value = bm.memo;
-      editingIndex = index;
-      form.querySelector("button").textContent = "更新";
-    }
-
-    // 削除処理
-    function removeBookmark(index) {
-      bookmarks.splice(index, 1);
-      save();
-      render();
-    }
-
-    // 保存処理（localStorage）
-    function save() {
-      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-    }
-
-    // タグ一覧を生成
-    function renderTags() {
-      const tagSet = new Set();
-      bookmarks.forEach(bm => {
-        if (bm.tags) {
-          bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
-        }
-      });
-      tagList.innerHTML = `<a onclick="filterByTag(null)" class="${currentTagFilter===null?'active':''}">すべて</a>`;
-      [...tagSet].sort().forEach(tag => {
-        tagList.innerHTML += `<a onclick="filterByTag('${tag}')" class="${currentTagFilter===tag?'active':''}">${tag}</a>`;
-      });
-    }
-
-    // タグ絞り込み
-    function filterByTag(tag) {
-      currentTagFilter = tag;
-      render();
-    }
-
-    // 検索ボックス入力イベント
-    searchBox.addEventListener("input", () => {
-      currentSearchQuery = searchBox.value.toLowerCase();
-      render();
-    });
-
-    // AND/OR モード切り替え
-    document.querySelectorAll("input[name='searchMode']").forEach(radio => {
-      radio.addEventListener("change", e => {
-        searchMode = e.target.value;
-        render();
-      });
-    });
-
-    // ブックマーク一覧を再描画
-    function render() {
-      list.innerHTML = "";
-      bookmarks
-        .map((bm, originalIndex) => ({ bm, originalIndex })) // ← 元のindexを保持（不具合修正ポイント）
-        .filter(({ bm }) => {
-          // タグ絞り込み
-          if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
-            return false;
-          }
-          // 検索フィルタ
-          if (currentSearchQuery) {
-            const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
-            const keywords = currentSearchQuery.split(/\s+/).filter(Boolean);
-            if (searchMode === "AND") {
-              return keywords.every(k => haystack.includes(k));
-            } else {
-              return keywords.some(k => haystack.includes(k));
-            }
-          }
-          return true;
-        })
-        .forEach(({ bm, originalIndex }) => {
-          // 表示行を生成
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
-            <td class="tags">${bm.tags || "-"}</td>
-            <td class="memo">${bm.memo || ""}</td>
-            <td>
-              <button class="action-btn" onclick="editBookmark(${originalIndex})">編集</button>
-              <button class="delete-btn" onclick="removeBookmark(${originalIndex})">削除</button>
-            </td>
-          `;
-          list.appendChild(row);
+        // イベント登録
+        this.form.addEventListener("submit", e => this.handleSubmit(e));
+        this.searchBox.addEventListener("input", () => { this.currentSearchQuery = this.searchBox.value.toLowerCase(); this.render(); });
+        document.querySelectorAll("input[name='searchMode']").forEach(radio => {
+          radio.addEventListener("change", e => { this.searchMode = e.target.value; this.render(); });
         });
 
-      renderTags();
-    }
+        this.render();
+      }
 
-    // === JSON エクスポート / インポート ===
-    function exportJSON() {
-      const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: "application/json" });
-      downloadFile(blob, "bookmarks.json");
-    }
-    function importJSON(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (Array.isArray(data)) {
-            bookmarks = data;
-            save();
-            render();
-            alert("JSONインポート完了！");
-          }
-        } catch { alert("JSON読み込み失敗"); }
-      };
-      reader.readAsText(file);
-    }
+      handleSubmit(e) {
+        e.preventDefault();
+        const title = document.getElementById("title").value.trim();
+        const url = document.getElementById("url").value.trim();
+        const tags = document.getElementById("tags").value.trim();
+        const memo = document.getElementById("memo").value.trim();
+        if (!title || !url) return;
 
-    // === CSV エクスポート / インポート ===
-    function exportCSV() {
-      let csv = "タイトル,URL,タグ,メモ\n";
-      bookmarks.forEach(bm => {
-        const row = [
-          `"${(bm.title||"").replace(/"/g,'""')}"`,
-          `"${(bm.url||"").replace(/"/g,'""')}"`,
-          `"${(bm.tags||"").replace(/"/g,'""')}"`,
-          `"${(bm.memo||"").replace(/"/g,'""')}"`
-        ].join(",");
-        csv += row + "\n";
-      });
-      const blob = new Blob([csv], { type: "text/csv" });
-      downloadFile(blob, "bookmarks.csv");
-    }
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const lines = e.target.result.split(/\r?\n/).slice(1);
-          bookmarks = lines.filter(l=>l.trim()).map(line => {
-            const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
-            return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
+        if (this.editingIndex !== null) {
+          this.bookmarks[this.editingIndex] = { title, url, tags, memo };
+          this.editingIndex = null;
+          this.form.querySelector("button").textContent = "追加";
+        } else {
+          this.bookmarks.push({ title, url, tags, memo });
+        }
+        this.save();
+        this.render();
+        this.form.reset();
+      }
+
+      editBookmark(index) {
+        const bm = this.bookmarks[index];
+        document.getElementById("title").value = bm.title;
+        document.getElementById("url").value = bm.url;
+        document.getElementById("tags").value = bm.tags;
+        document.getElementById("memo").value = bm.memo;
+        this.editingIndex = index;
+        this.form.querySelector("button").textContent = "更新";
+      }
+
+      removeBookmark(index) {
+        this.bookmarks.splice(index, 1);
+        this.save();
+        this.render();
+      }
+
+      save() {
+        localStorage.setItem("bookmarks", JSON.stringify(this.bookmarks));
+      }
+
+      renderTags() {
+        const tagSet = new Set();
+        this.bookmarks.forEach(bm => {
+          if (bm.tags) bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
+        });
+        this.tagList.innerHTML = `<a onclick="app.filterByTag(null)" class="${this.currentTagFilter===null?'active':''}">すべて</a>`;
+        [...tagSet].sort().forEach(tag => {
+          this.tagList.innerHTML += `<a onclick="app.filterByTag('${tag}')" class="${this.currentTagFilter===tag?'active':''}">${tag}</a>`;
+        });
+      }
+
+      filterByTag(tag) {
+        this.currentTagFilter = tag;
+        this.render();
+      }
+
+      render() {
+        this.list.innerHTML = "";
+        this.bookmarks
+          .map((bm, originalIndex) => ({ bm, originalIndex }))
+          .filter(({ bm }) => {
+            if (this.currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(this.currentTagFilter))) return false;
+            if (this.currentSearchQuery) {
+              const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
+              const keywords = this.currentSearchQuery.split(/\s+/).filter(Boolean);
+              return this.searchMode === "AND" ? keywords.every(k => haystack.includes(k)) : keywords.some(k => haystack.includes(k));
+            }
+            return true;
+          })
+          .forEach(({ bm, originalIndex }) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
+              <td class="tags">${bm.tags || "-"}</td>
+              <td class="memo">${bm.memo || ""}</td>
+              <td>
+                <button class="action-btn" onclick="app.editBookmark(${originalIndex})">編集</button>
+                <button class="delete-btn" onclick="app.removeBookmark(${originalIndex})">削除</button>
+              </td>
+            `;
+            this.list.appendChild(row);
           });
-          save();
-          render();
-          alert("CSVインポート完了！");
-        } catch { alert("CSV読み込み失敗"); }
-      };
-      reader.readAsText(file);
+
+        this.renderTags();
+      }
+
+      // ===== JSON/CSVエクスポート・インポート =====
+      exportJSON() {
+        const blob = new Blob([JSON.stringify(this.bookmarks, null, 2)], { type: "application/json" });
+        this.downloadFile(blob, "bookmarks.json");
+      }
+      importJSON(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (Array.isArray(data)) {
+              this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！");
+            }
+          } catch { alert("JSON読み込み失敗"); }
+        };
+        reader.readAsText(file);
+      }
+
+      exportCSV() {
+        let csv = "タイトル,URL,タグ,メモ\n";
+        this.bookmarks.forEach(bm => {
+          const row = [`"${(bm.title||"").replace(/"/g,'""')}"`,
+                       `"${(bm.url||"").replace(/"/g,'""')}"`,
+                       `"${(bm.tags||"").replace(/"/g,'""')}"`,
+                       `"${(bm.memo||"").replace(/"/g,'""')}"`].join(",");
+          csv += row + "\n";
+        });
+        this.downloadFile(new Blob([csv], { type: "text/csv" }), "bookmarks.csv");
+      }
+      importCSV(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const lines = e.target.result.split(/\r?\n/).slice(1);
+            this.bookmarks = lines.filter(l=>l.trim()).map(line => {
+              const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
+              return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
+            });
+            this.save(); this.render(); alert("CSVインポート完了！");
+          } catch { alert("CSV読み込み失敗"); }
+        };
+        reader.readAsText(file);
+      }
+
+      downloadFile(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      }
     }
 
-    // ダウンロード用共通関数
-    function downloadFile(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    // アプリ起動
+    const app = new BookmarkApp();
   </script>
 </body>
 </html>
