@@ -181,7 +181,8 @@
     function render() {
       list.innerHTML = "";
       bookmarks
-        .filter(bm => {
+        .map((bm, originalIndex) => ({ bm, originalIndex })) // 元のindexを保持
+        .filter(({ bm }) => {
           // タグ絞り込み
           if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
             return false;
@@ -198,15 +199,15 @@
           }
           return true;
         })
-        .forEach((bm, i) => {
+        .forEach(({ bm, originalIndex }) => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
             <td class="tags">${bm.tags || "-"}</td>
             <td class="memo">${bm.memo || ""}</td>
             <td>
-              <button class="action-btn" onclick="editBookmark(${i})">編集</button>
-              <button class="delete-btn" onclick="removeBookmark(${i})">削除</button>
+              <button class="action-btn" onclick="editBookmark(${originalIndex})">編集</button>
+              <button class="delete-btn" onclick="removeBookmark(${originalIndex})">削除</button>
             </td>
           `;
           list.appendChild(row);
