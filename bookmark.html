@@ -6,15 +6,10 @@
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #f9f9f9; }
     h1 { text-align: center; margin-bottom: 20px; }
-    form {
-      margin-bottom: 1em; background: #fff; padding: 15px;
-      border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      max-width: 600px; margin: auto;
-    }
-    input, textarea { margin: 5px 0; display: block; width: 100%;
-      padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
-      border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
+    form { margin-bottom: 1em; background: #fff; padding: 15px; border-radius: 5px; 
+           box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+    input, textarea { margin: 5px 0; display: block; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none; border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
     #searchContainer { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 15px 0; }
     #searchBox { flex: 0 0 300px; padding: 6px; border: 1px solid #aaa; border-radius: 4px; }
@@ -59,17 +54,70 @@
   <div id="tagList"></div>
   <table>
     <thead>
-      <tr>
-        <th>タイトル</th>
-        <th>タグ</th>
-        <th>メモ</th>
-        <th>操作</th>
-      </tr>
+      <tr><th>タイトル</th><th>タグ</th><th>メモ</th><th>操作</th></tr>
     </thead>
     <tbody id="bookmarkList"></tbody>
   </table>
 
   <script>
+    class TagList {
+      constructor(app, el) {
+        this.app = app;
+        this.el = el;
+      }
+      render() {
+        const tagSet = new Set();
+        this.app.bookmarks.forEach(bm => {
+          if (bm.tags) bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
+        });
+        this.el.innerHTML = `<a onclick="app.filterByTag(null)" class="${this.app.currentTagFilter===null?'active':''}">すべて</a>`;
+        [...tagSet].sort().forEach(tag => {
+          this.el.innerHTML += `<a onclick="app.filterByTag('${tag}')" class="${this.app.currentTagFilter===tag?'active':''}">${tag}</a>`;
+        });
+      }
+    }
+
+    class SearchBar {
+      constructor(app, inputEl, radios) {
+        this.app = app;
+        this.inputEl = inputEl;
+        this.radios = radios;
+        this.inputEl.addEventListener("input", () => { 
+          this.app.currentSearchQuery = this.inputEl.value.toLowerCase(); 
+          this.app.render(); 
+        });
+        this.radios.forEach(r => r.addEventListener("change", e => { 
+          this.app.searchMode = e.target.value; 
+          this.app.render(); 
+        }));
+      }
+    }
+
+    class BookmarkList {
+      constructor(app, el) {
+        this.app = app;
+        this.el = el;
+      }
+      render() {
+        this.el.innerHTML = "";
+        this.app.bookmarks
+          .map((bm, idx) => ({ bm, idx }))
+          .filter(({ bm }) => this.app.filterBookmark(bm))
+          .forEach(({ bm, idx }) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
+              <td class="tags">${bm.tags || "-"}</td>
+              <td class="memo">${bm.memo || ""}</td>
+              <td>
+                <button class="action-btn" onclick="app.editBookmark(${idx})">編集</button>
+                <button class="delete-btn" onclick="app.removeBookmark(${idx})">削除</button>
+              </td>`;
+            this.el.appendChild(row);
+          });
+      }
+    }
+
     class BookmarkApp {
       constructor() {
         this.bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
@@ -78,22 +126,19 @@
         this.currentSearchQuery = "";
         this.searchMode = "AND";
 
-        // DOM
-        this.form = document.getElementById("bookmarkForm");
-        this.list = document.getElementById("bookmarkList");
-        this.tagList = document.getElementById("tagList");
-        this.searchBox = document.getElementById("searchBox");
+        // UI 部品
+        this.tagList = new TagList(this, document.getElementById("tagList"));
+        this.searchBar = new SearchBar(this, document.getElementById("searchBox"), document.querySelectorAll("input[name='searchMode']"));
+        this.bookmarkList = new BookmarkList(this, document.getElementById("bookmarkList"));
 
-        // イベント登録
+        // フォーム処理
+        this.form = document.getElementById("bookmarkForm");
         this.form.addEventListener("submit", e => this.handleSubmit(e));
-        this.searchBox.addEventListener("input", () => { this.currentSearchQuery = this.searchBox.value.toLowerCase(); this.render(); });
-        document.querySelectorAll("input[name='searchMode']").forEach(radio => {
-          radio.addEventListener("change", e => { this.searchMode = e.target.value; this.render(); });
-        });
 
         this.render();
       }
 
+      // ===== CRUD =====
       handleSubmit(e) {
         e.preventDefault();
         const title = document.getElementById("title").value.trim();
@@ -101,7 +146,6 @@
         const tags = document.getElementById("tags").value.trim();
         const memo = document.getElementById("memo").value.trim();
         if (!title || !url) return;
-
         if (this.editingIndex !== null) {
           this.bookmarks[this.editingIndex] = { title, url, tags, memo };
           this.editingIndex = null;
@@ -109,11 +153,8 @@
         } else {
           this.bookmarks.push({ title, url, tags, memo });
         }
-        this.save();
-        this.render();
-        this.form.reset();
+        this.save(); this.render(); this.form.reset();
       }
-
       editBookmark(index) {
         const bm = this.bookmarks[index];
         document.getElementById("title").value = bm.title;
@@ -123,64 +164,31 @@
         this.editingIndex = index;
         this.form.querySelector("button").textContent = "更新";
       }
-
       removeBookmark(index) {
         this.bookmarks.splice(index, 1);
-        this.save();
-        this.render();
+        this.save(); this.render();
+      }
+      save() { localStorage.setItem("bookmarks", JSON.stringify(this.bookmarks)); }
+
+      // ===== FILTER =====
+      filterByTag(tag) { this.currentTagFilter = tag; this.render(); }
+      filterBookmark(bm) {
+        if (this.currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(this.currentTagFilter))) return false;
+        if (this.currentSearchQuery) {
+          const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
+          const keywords = this.currentSearchQuery.split(/\s+/).filter(Boolean);
+          return this.searchMode === "AND" ? keywords.every(k => haystack.includes(k)) : keywords.some(k => haystack.includes(k));
+        }
+        return true;
       }
 
-      save() {
-        localStorage.setItem("bookmarks", JSON.stringify(this.bookmarks));
-      }
-
-      renderTags() {
-        const tagSet = new Set();
-        this.bookmarks.forEach(bm => {
-          if (bm.tags) bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
-        });
-        this.tagList.innerHTML = `<a onclick="app.filterByTag(null)" class="${this.currentTagFilter===null?'active':''}">すべて</a>`;
-        [...tagSet].sort().forEach(tag => {
-          this.tagList.innerHTML += `<a onclick="app.filterByTag('${tag}')" class="${this.currentTagFilter===tag?'active':''}">${tag}</a>`;
-        });
-      }
-
-      filterByTag(tag) {
-        this.currentTagFilter = tag;
-        this.render();
-      }
-
+      // ===== RENDER =====
       render() {
-        this.list.innerHTML = "";
-        this.bookmarks
-          .map((bm, originalIndex) => ({ bm, originalIndex }))
-          .filter(({ bm }) => {
-            if (this.currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(this.currentTagFilter))) return false;
-            if (this.currentSearchQuery) {
-              const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
-              const keywords = this.currentSearchQuery.split(/\s+/).filter(Boolean);
-              return this.searchMode === "AND" ? keywords.every(k => haystack.includes(k)) : keywords.some(k => haystack.includes(k));
-            }
-            return true;
-          })
-          .forEach(({ bm, originalIndex }) => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
-              <td class="tags">${bm.tags || "-"}</td>
-              <td class="memo">${bm.memo || ""}</td>
-              <td>
-                <button class="action-btn" onclick="app.editBookmark(${originalIndex})">編集</button>
-                <button class="delete-btn" onclick="app.removeBookmark(${originalIndex})">削除</button>
-              </td>
-            `;
-            this.list.appendChild(row);
-          });
-
-        this.renderTags();
+        this.bookmarkList.render();
+        this.tagList.render();
       }
 
-      // ===== JSON/CSVエクスポート・インポート =====
+      // ===== EXPORT / IMPORT =====
       exportJSON() {
         const blob = new Blob([JSON.stringify(this.bookmarks, null, 2)], { type: "application/json" });
         this.downloadFile(blob, "bookmarks.json");
@@ -188,17 +196,12 @@
       importJSON(event) {
         const file = event.target.files[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            const data = JSON.parse(e.target.result);
-            if (Array.isArray(data)) {
-              this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！");
-            }
-          } catch { alert("JSON読み込み失敗"); }
-        };
+        reader.onload = e => { try {
+          const data = JSON.parse(e.target.result);
+          if (Array.isArray(data)) { this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！"); }
+        } catch { alert("JSON読み込み失敗"); }};
         reader.readAsText(file);
       }
-
       exportCSV() {
         let csv = "タイトル,URL,タグ,メモ\n";
         this.bookmarks.forEach(bm => {
@@ -213,23 +216,19 @@
       importCSV(event) {
         const file = event.target.files[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            const lines = e.target.result.split(/\r?\n/).slice(1);
-            this.bookmarks = lines.filter(l=>l.trim()).map(line => {
-              const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
-              return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
-            });
-            this.save(); this.render(); alert("CSVインポート完了！");
-          } catch { alert("CSV読み込み失敗"); }
-        };
+        reader.onload = e => { try {
+          const lines = e.target.result.split(/\r?\n/).slice(1);
+          this.bookmarks = lines.filter(l=>l.trim()).map(line => {
+            const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
+            return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
+          });
+          this.save(); this.render(); alert("CSVインポート完了！");
+        } catch { alert("CSV読み込み失敗"); }};
         reader.readAsText(file);
       }
-
       downloadFile(blob, filename) {
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = filename; a.click();
+        const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
         URL.revokeObjectURL(url);
       }
     }
