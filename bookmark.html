@@ -55,6 +55,7 @@
 <body>
   <h1>📑 ブックマークアプリ</h1>
 
+  <!-- 入力フォーム -->
   <form id="bookmarkForm">
     <input type="text" id="title" placeholder="タイトル" required>
     <input type="url" id="url" placeholder="URL" required>
@@ -63,6 +64,7 @@
     <button type="submit">追加</button>
   </form>
 
+  <!-- エクスポート / インポート機能 -->
   <div style="text-align:center; margin: 15px;">
     <button onclick="exportJSON()">JSONエクスポート</button>
     <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="importJSON(event)">
@@ -80,7 +82,10 @@
     <label><input type="radio" name="searchMode" value="OR"> OR</label>
   </div>
 
+  <!-- タグ一覧 -->
   <div id="tagList"></div>
+
+  <!-- ブックマーク表示テーブル -->
   <table>
     <thead>
       <tr>
@@ -94,19 +99,22 @@
   </table>
 
   <script>
+    // DOM参照
     const form = document.getElementById("bookmarkForm");
     const list = document.getElementById("bookmarkList");
     const tagList = document.getElementById("tagList");
     const searchBox = document.getElementById("searchBox");
 
-    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
-    let editingIndex = null;
-    let currentTagFilter = null;
-    let currentSearchQuery = "";
-    let searchMode = "AND";
+    // アプリ状態管理
+    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]"); // localStorageから復元
+    let editingIndex = null; // 編集対象のindex
+    let currentTagFilter = null; // 現在のタグフィルタ
+    let currentSearchQuery = ""; // 現在の検索キーワード
+    let searchMode = "AND"; // AND / OR モード
 
     render();
 
+    // フォーム送信（追加 or 更新）
     form.addEventListener("submit", e => {
       e.preventDefault();
       const title = document.getElementById("title").value.trim();
@@ -116,10 +124,12 @@
       if (!title || !url) return;
 
       if (editingIndex !== null) {
+        // 編集中 → 上書き
         bookmarks[editingIndex] = { title, url, tags, memo };
         editingIndex = null;
         form.querySelector("button").textContent = "追加";
       } else {
+        // 新規追加
         bookmarks.push({ title, url, tags, memo });
       }
 
@@ -128,6 +138,7 @@
       form.reset();
     });
 
+    // 編集処理
     function editBookmark(index) {
       const bm = bookmarks[index];
       document.getElementById("title").value = bm.title;
@@ -138,16 +149,19 @@
       form.querySelector("button").textContent = "更新";
     }
 
+    // 削除処理
     function removeBookmark(index) {
       bookmarks.splice(index, 1);
       save();
       render();
     }
 
+    // 保存処理（localStorage）
     function save() {
       localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
     }
 
+    // タグ一覧を生成
     function renderTags() {
       const tagSet = new Set();
       bookmarks.forEach(bm => {
@@ -161,16 +175,19 @@
       });
     }
 
+    // タグ絞り込み
     function filterByTag(tag) {
       currentTagFilter = tag;
       render();
     }
 
+    // 検索ボックス入力イベント
     searchBox.addEventListener("input", () => {
       currentSearchQuery = searchBox.value.toLowerCase();
       render();
     });
 
+    // AND/OR モード切り替え
     document.querySelectorAll("input[name='searchMode']").forEach(radio => {
       radio.addEventListener("change", e => {
         searchMode = e.target.value;
@@ -178,16 +195,17 @@
       });
     });
 
+    // ブックマーク一覧を再描画
     function render() {
       list.innerHTML = "";
       bookmarks
-        .map((bm, originalIndex) => ({ bm, originalIndex })) // 元のindexを保持
+        .map((bm, originalIndex) => ({ bm, originalIndex })) // ← 元のindexを保持（不具合修正ポイント）
         .filter(({ bm }) => {
           // タグ絞り込み
           if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
             return false;
           }
-          // 検索クエリ
+          // 検索フィルタ
           if (currentSearchQuery) {
             const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
             const keywords = currentSearchQuery.split(/\s+/).filter(Boolean);
@@ -200,6 +218,7 @@
           return true;
         })
         .forEach(({ bm, originalIndex }) => {
+          // 表示行を生成
           const row = document.createElement("tr");
           row.innerHTML = `
             <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
@@ -273,6 +292,7 @@
       reader.readAsText(file);
     }
 
+    // ダウンロード用共通関数
     function downloadFile(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
