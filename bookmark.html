@@ -7,15 +7,10 @@
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #f9f9f9; }
     h1 { text-align: center; margin-bottom: 20px; }
-    form {
-      margin-bottom: 1em; background: #fff; padding: 15px;
-      border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      max-width: 600px; margin: auto;
-    }
-    input, textarea { margin: 5px 0; display: block; width: 100%;
-      padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none;
-      border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
+    form { margin-bottom: 1em; background: #fff; padding: 15px; border-radius: 5px; 
+           box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+    input, textarea { margin: 5px 0; display: block; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    button { margin: 5px 5px 5px 0; padding: 6px 12px; border: none; border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
     button:hover { background: #0056b3; }
 
     /* 検索UIを横並びに整列 */
@@ -50,9 +45,7 @@
     #tagList { text-align: center; margin: 15px 0; }
     #tagList a { margin: 0 6px; cursor: pointer; color: #007bff; text-decoration: none; }
     #tagList a.active { font-weight: bold; color: darkred; }
-
-    table { width: 100%; border-collapse: collapse; background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
     th { background: #f0f0f0; }
     .tags { font-size: 0.85em; color: #555; }
@@ -73,16 +66,14 @@
   </form>
 
   <div style="text-align:center; margin: 15px;">
-    <button onclick="exportJSON()">JSONエクスポート</button>
-    <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="importJSON(event)">
+    <button onclick="app.exportJSON()">JSONエクスポート</button>
+    <input type="file" id="importJSON" style="display:none" accept="application/json" onchange="app.importJSON(event)">
     <button onclick="document.getElementById('importJSON').click()">JSONインポート</button>
-
-    <button onclick="exportCSV()">CSVエクスポート</button>
-    <input type="file" id="importCSV" style="display:none" accept=".csv,text/csv" onchange="importCSV(event)">
+    <button onclick="app.exportCSV()">CSVエクスポート</button>
+    <input type="file" id="importCSV" style="display:none" accept=".csv,text/csv" onchange="app.importCSV(event)">
     <button onclick="document.getElementById('importCSV').click()">CSVインポート</button>
   </div>
 
-  <!-- 🔍 検索UI -->
   <div id="searchContainer">
     <input type="text" id="searchBox" placeholder="検索（スペース区切りで複数キーワード）">
     <div class="searchMode">
@@ -100,203 +91,182 @@
   <div id="tagList"></div>
   <table>
     <thead>
-      <tr>
-        <th>タイトル</th>
-        <th>タグ</th>
-        <th>メモ</th>
-        <th>操作</th>
-      </tr>
+      <tr><th>タイトル</th><th>タグ</th><th>メモ</th><th>操作</th></tr>
     </thead>
     <tbody id="bookmarkList"></tbody>
   </table>
 
   <script>
-    const form = document.getElementById("bookmarkForm");
-    const list = document.getElementById("bookmarkList");
-    const tagList = document.getElementById("tagList");
-    const searchBox = document.getElementById("searchBox");
+    // ==============================
+    // Storage Strategy Classes
+    // ==============================
+    class StorageStrategy {
+      load() { throw new Error("load() not implemented"); }
+      save(data) { throw new Error("save() not implemented"); }
+    }
 
-    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
-    let editingIndex = null;
-    let currentTagFilter = null;
-    let currentSearchQuery = "";
-    let searchMode = "AND";
+    class LocalStorageStrategy extends StorageStrategy {
+      constructor(key="bookmarks") { super(); this.key = key; }
+      load() { return JSON.parse(localStorage.getItem(this.key) || "[]"); }
+      save(data) { localStorage.setItem(this.key, JSON.stringify(data)); }
+    }
 
-    render();
+    class MemoryStorageStrategy extends StorageStrategy {
+      constructor() { super(); this.memory = []; }
+      load() { return this.memory; }
+      save(data) { this.memory = data; }
+    }
 
-    form.addEventListener("submit", e => {
-      e.preventDefault();
-      const title = document.getElementById("title").value.trim();
-      const url = document.getElementById("url").value.trim();
-      const tags = document.getElementById("tags").value.trim();
-      const memo = document.getElementById("memo").value.trim();
-      if (!title || !url) return;
+    // ==============================
+    // UI Component Classes
+    // ==============================
+    class TagList {
+      constructor(app, el) { this.app = app; this.el = el; }
+      render() {
+        const tagSet = new Set();
+        this.app.bookmarks.forEach(bm => {
+          if (bm.tags) bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
+        });
+        this.el.innerHTML = `<a onclick="app.filterByTag(null)" class="${this.app.currentTagFilter===null?'active':''}">すべて</a>`;
+        [...tagSet].sort().forEach(tag => {
+          this.el.innerHTML += `<a onclick="app.filterByTag('${tag}')" class="${this.app.currentTagFilter===tag?'active':''}">${tag}</a>`;
+        });
+      }
+    }
 
-      if (editingIndex !== null) {
-        bookmarks[editingIndex] = { title, url, tags, memo };
-        editingIndex = null;
-        form.querySelector("button").textContent = "追加";
-      } else {
-        bookmarks.push({ title, url, tags, memo });
+    class SearchBar {
+      constructor(app, inputEl, radios) {
+        this.app = app; this.inputEl = inputEl; this.radios = radios;
+        this.inputEl.addEventListener("input", () => { this.app.currentSearchQuery = this.inputEl.value.toLowerCase(); this.app.render(); });
+        this.radios.forEach(r => r.addEventListener("change", e => { this.app.searchMode = e.target.value; this.app.render(); }));
+      }
+    }
+
+    class BookmarkList {
+      constructor(app, el) { this.app = app; this.el = el; }
+      render() {
+        this.el.innerHTML = "";
+        this.app.bookmarks
+          .map((bm, idx) => ({ bm, idx }))
+          .filter(({ bm }) => this.app.filterBookmark(bm))
+          .forEach(({ bm, idx }) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
+              <td class="tags">${bm.tags || "-"}</td>
+              <td class="memo">${bm.memo || ""}</td>
+              <td>
+                <button class="action-btn" onclick="app.editBookmark(${idx})">編集</button>
+                <button class="delete-btn" onclick="app.removeBookmark(${idx})">削除</button>
+              </td>`;
+            this.el.appendChild(row);
+          });
+      }
+    }
+
+    // ==============================
+    // Main App
+    // ==============================
+    class BookmarkApp {
+      constructor(storage) {
+        this.storage = storage; // ← Strategy注入
+        this.bookmarks = this.storage.load();
+        this.editingIndex = null;
+        this.currentTagFilter = null;
+        this.currentSearchQuery = "";
+        this.searchMode = "AND";
+
+        // UI
+        this.tagList = new TagList(this, document.getElementById("tagList"));
+        this.searchBar = new SearchBar(this, document.getElementById("searchBox"), document.querySelectorAll("input[name='searchMode']"));
+        this.bookmarkList = new BookmarkList(this, document.getElementById("bookmarkList"));
+        this.form = document.getElementById("bookmarkForm");
+
+        this.form.addEventListener("submit", e => this.handleSubmit(e));
+        this.render();
       }
 
-      save();
-      render();
-      form.reset();
-    });
-
-    function editBookmark(index) {
-      const bm = bookmarks[index];
-      document.getElementById("title").value = bm.title;
-      document.getElementById("url").value = bm.url;
-      document.getElementById("tags").value = bm.tags;
-      document.getElementById("memo").value = bm.memo;
-      editingIndex = index;
-      form.querySelector("button").textContent = "更新";
-    }
-
-    function removeBookmark(index) {
-      bookmarks.splice(index, 1);
-      save();
-      render();
-    }
-
-    function save() {
-      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-    }
-
-    function renderTags() {
-      const tagSet = new Set();
-      bookmarks.forEach(bm => {
-        if (bm.tags) {
-          bm.tags.split(",").map(t => t.trim()).forEach(t => tagSet.add(t));
+      // CRUD
+      handleSubmit(e) {
+        e.preventDefault();
+        const title = document.getElementById("title").value.trim();
+        const url = document.getElementById("url").value.trim();
+        const tags = document.getElementById("tags").value.trim();
+        const memo = document.getElementById("memo").value.trim();
+        if (!title || !url) return;
+        if (this.editingIndex !== null) {
+          this.bookmarks[this.editingIndex] = { title, url, tags, memo };
+          this.editingIndex = null;
+          this.form.querySelector("button").textContent = "追加";
+        } else {
+          this.bookmarks.push({ title, url, tags, memo });
         }
-      });
-      tagList.innerHTML = `<a onclick="filterByTag(null)" class="${currentTagFilter===null?'active':''}">すべて</a>`;
-      [...tagSet].sort().forEach(tag => {
-        tagList.innerHTML += `<a onclick="filterByTag('${tag}')" class="${currentTagFilter===tag?'active':''}">${tag}</a>`;
-      });
-    }
+        this.save(); this.render(); this.form.reset();
+      }
+      editBookmark(index) {
+        const bm = this.bookmarks[index];
+        document.getElementById("title").value = bm.title;
+        document.getElementById("url").value = bm.url;
+        document.getElementById("tags").value = bm.tags;
+        document.getElementById("memo").value = bm.memo;
+        this.editingIndex = index;
+        this.form.querySelector("button").textContent = "更新";
+      }
+      removeBookmark(index) { this.bookmarks.splice(index, 1); this.save(); this.render(); }
+      save() { this.storage.save(this.bookmarks); }
 
-    function filterByTag(tag) {
-      currentTagFilter = tag;
-      render();
-    }
+      // FILTER
+      filterByTag(tag) { this.currentTagFilter = tag; this.render(); }
+      filterBookmark(bm) {
+        if (this.currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(this.currentTagFilter))) return false;
+        if (this.currentSearchQuery) {
+          const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
+          const keywords = this.currentSearchQuery.split(/\s+/).filter(Boolean);
+          return this.searchMode === "AND" ? keywords.every(k => haystack.includes(k)) : keywords.some(k => haystack.includes(k));
+        }
+        return true;
+      }
 
-    searchBox.addEventListener("input", () => {
-      currentSearchQuery = searchBox.value.toLowerCase();
-      render();
-    });
+      // RENDER
+      render() { this.bookmarkList.render(); this.tagList.render(); }
 
-    document.querySelectorAll("input[name='searchMode']").forEach(radio => {
-      radio.addEventListener("change", e => {
-        searchMode = e.target.value;
-        render();
-      });
-    });
-
-    function render() {
-      list.innerHTML = "";
-      bookmarks
-        .filter(bm => {
-          // タグ絞り込み
-          if (currentTagFilter && !(bm.tags && bm.tags.split(",").map(t => t.trim()).includes(currentTagFilter))) {
-            return false;
-          }
-          // 検索クエリ
-          if (currentSearchQuery) {
-            const haystack = [bm.title, bm.tags, bm.memo].join(" ").toLowerCase();
-            const keywords = currentSearchQuery.split(/\s+/).filter(Boolean);
-            if (searchMode === "AND") {
-              return keywords.every(k => haystack.includes(k));
-            } else {
-              return keywords.some(k => haystack.includes(k));
-            }
-          }
-          return true;
-        })
-        .forEach((bm, i) => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td><a href="${bm.url}" target="_blank">${bm.title}</a></td>
-            <td class="tags">${bm.tags || "-"}</td>
-            <td class="memo">${bm.memo || ""}</td>
-            <td>
-              <button class="action-btn" onclick="editBookmark(${i})">編集</button>
-              <button class="delete-btn" onclick="removeBookmark(${i})">削除</button>
-            </td>
-          `;
-          list.appendChild(row);
+      // EXPORT / IMPORT
+      exportJSON() { const blob = new Blob([JSON.stringify(this.bookmarks, null, 2)], { type: "application/json" }); this.downloadFile(blob, "bookmarks.json"); }
+      importJSON(event) { const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader(); reader.onload = e => { try {
+          const data = JSON.parse(e.target.result); if (Array.isArray(data)) { this.bookmarks = data; this.save(); this.render(); alert("JSONインポート完了！"); }
+        } catch { alert("JSON読み込み失敗"); }}; reader.readAsText(file); }
+      exportCSV() {
+        let csv = "タイトル,URL,タグ,メモ\n";
+        this.bookmarks.forEach(bm => {
+          const row = [`"${(bm.title||"").replace(/"/g,'""')}"`,
+                       `"${(bm.url||"").replace(/"/g,'""')}"`,
+                       `"${(bm.tags||"").replace(/"/g,'""')}"`,
+                       `"${(bm.memo||"").replace(/"/g,'""')}"`].join(",");
+          csv += row + "\n";
         });
-
-      renderTags();
-    }
-
-    // === JSON エクスポート / インポート ===
-    function exportJSON() {
-      const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: "application/json" });
-      downloadFile(blob, "bookmarks.json");
-    }
-    function importJSON(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (Array.isArray(data)) {
-            bookmarks = data;
-            save();
-            render();
-            alert("JSONインポート完了！");
-          }
-        } catch { alert("JSON読み込み失敗"); }
-      };
-      reader.readAsText(file);
-    }
-
-    // === CSV エクスポート / インポート ===
-    function exportCSV() {
-      let csv = "タイトル,URL,タグ,メモ\n";
-      bookmarks.forEach(bm => {
-        const row = [
-          `"${(bm.title||"").replace(/"/g,'""')}"`,
-          `"${(bm.url||"").replace(/"/g,'""')}"`,
-          `"${(bm.tags||"").replace(/"/g,'""')}"`,
-          `"${(bm.memo||"").replace(/"/g,'""')}"`
-        ].join(",");
-        csv += row + "\n";
-      });
-      const blob = new Blob([csv], { type: "text/csv" });
-      downloadFile(blob, "bookmarks.csv");
-    }
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
+        this.downloadFile(new Blob([csv], { type: "text/csv" }), "bookmarks.csv");
+      }
+      importCSV(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => { try {
           const lines = e.target.result.split(/\r?\n/).slice(1);
-          bookmarks = lines.filter(l=>l.trim()).map(line => {
+          this.bookmarks = lines.filter(l=>l.trim()).map(line => {
             const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,"").replace(/""/g,'"'));
             return { title: cols[0]||"", url: cols[1]||"", tags: cols[2]||"", memo: cols[3]||"" };
           });
-          save();
-          render();
-          alert("CSVインポート完了！");
-        } catch { alert("CSV読み込み失敗"); }
-      };
-      reader.readAsText(file);
+          this.save(); this.render(); alert("CSVインポート完了！");
+        } catch { alert("CSV読み込み失敗"); }}; reader.readAsText(file);
+      }
+      downloadFile(blob, filename) { const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
     }
 
-    function downloadFile(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    // ==============================
+    // アプリ起動
+    // ==============================
+    const app = new BookmarkApp(new LocalStorageStrategy());
+    // テスト用途なら: const app = new BookmarkApp(new MemoryStorageStrategy());
   </script>
 </body>
 </html>
